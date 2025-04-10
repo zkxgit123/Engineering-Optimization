@@ -1,0 +1,75 @@
+clc;
+clear;
+%% 添加路径
+addpath('Common_function');
+addpath('Buffer_rule_GF_optimization');
+addpath('NSGA2_Sequence_optimization');
+addpath('AFSA_Sequence_optimization');
+addpath('IAFSA_Sequence_optimization');
+addpath('FPA_Sequence_optimization');
+addpath('DFPA2_Sequence_optimization');
+%% 样本选取定义
+Alg_total = 5;         % 选取的算法数量;% 算法种类：1-NSGA-II ; 2-AFSA ; 3-FPA；4-DFPA
+Operat_Times = 20;      % 运算次数
+group_size = 50;       % 种群数量
+Num_ite = 100; % 迭代次数
+Ref_point = [1500,120000,800,3000];  % Ref_point为参考点800
+%% 车身订单序列
+OrderSeq = readmatrix('neworder300.xlsx');%随机初始化订单序列
+%% 初始参数设置
+V = 1; % 零件序号
+M = 4; % 目标函数数量
+% 目标函数参数设定
+Obj(1,1) = 20;% 最大连续喷涂数量
+Obj(1,2) = 40;% 最大焊接喷涂数量
+Obj(1,3) = 10;% 总装需求容忍延误量
+% 缓冲区设定参数
+Buf(1,1)= 7 ; % 车道数量10
+Buf(1,2) = 8; % 单车道最高容纳数量10
+Buf(1,3) = 40; % 订单需求最大延误量
+%% 初始种群构建
+final_seq = cell(Alg_total,Operat_Times); % 返回的每次运算的最优解集（最后一组解集）
+for kk1 = 1:Operat_Times
+    fprintf('第%d次运算,', kk1);
+    init_pop = cell(group_size,5);% 新建初始种群
+    for ii2=1:group_size
+        individual = init_pop_maker(OrderSeq,Buf); % 初始种群
+        res_obj = new_objective(individual,Obj); % 目标函数赋值
+        init_pop{ii2,1}= individual;
+        init_pop{ii2,2} = res_obj(1,1); % 碳排放量
+        init_pop{ii2,3} = res_obj(1,2); % 生产成本
+        init_pop{ii2,4} = res_obj(1,3); % 物料均衡率
+        init_pop{ii2,5} = res_obj(1,4); % 总拖期延误
+    end
+    %% 输出数组定义
+    ans_set = cell(Num_ite,2); % 返回算法迭代出的结果
+    %% 序列优化
+    for Alg_num = 1:Alg_total
+        % 算法类型选取
+        fprintf('第%d种算法运算,', Alg_num);
+        switch Alg_num
+            case 1
+                P_cross = 0.9;  % 交叉算子概率
+                P_muta = 0.2;   % 变异算子概率
+                ans_set = Algorithm_NSGA2(kk1,init_pop,M,V,Num_ite,group_size,P_cross,P_muta,Ref_point,Buf,Obj);   % NSGA-II算法
+            case 2
+                P_swam_1 = 0.7;  % 群聚概率
+                delta_1 = 0.6;
+                visual_range_1 = 18;
+                ans_set = Algorithm_AFSA(kk1,init_pop,M,V,Num_ite,group_size,P_swam_1,delta_1,visual_range_1,Ref_point,Buf,Obj); % AFSA算法
+            case 3
+                P_swam_2 = 0.7;  % 群聚概率
+                delta_2 = 0.6;
+                visual_range_2 = 18;
+                ans_set =Algorithm_IAFSA(kk1,init_pop,M,V,Num_ite,group_size,P_swam_2,delta_2,visual_range_2,Ref_point,Buf,Obj);  % IAFSA算法
+            case 4
+                P_poll = 0.8; % 花授粉切换概率
+                ans_set = Algorithm_FPA(kk1,init_pop,M,V,Num_ite,group_size,P_poll,Ref_point,Buf,Obj); % FPA算法
+            case 5
+                P_poll = 0.8; % 花授粉切换概率
+                ans_set= Algorithm_DFPA2(kk1,init_pop,M,V,Num_ite,group_size,P_poll,Ref_point,Buf,Obj); % DFPA算法
+        end
+        % ans_set第一列为返回的50组排序等级为1的迭代序列，第二列为返回的HV指标评价值
+        final_seq{Alg_num,kk1} = ans_set(:,:); % 算法Alg_num运算kk1次之后存放的位置
+    end
+end
